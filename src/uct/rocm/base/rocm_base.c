@@ -120,6 +120,12 @@ hsa_agent_t uct_rocm_base_get_dev_agent(int dev_num)
     return uct_rocm_base_agents.agents[dev_num];
 }
 
+hsa_agent_t uct_rocm_base_get_gpu_agent(int dev_num)
+{
+    ucs_assert(dev_num < uct_rocm_base_agents.num_gpu);
+    return uct_rocm_base_agents.gpu_agents[dev_num];
+}
+
 int uct_rocm_base_get_dev_num(hsa_agent_t agent)
 {
     int i;
@@ -267,7 +273,7 @@ ucs_status_t uct_rocm_base_get_link_type(hsa_amd_link_info_type_t *link_type)
 
     agent1 = uct_rocm_base_agents.gpu_agents[0];
     agent2 = uct_rocm_base_agents.gpu_agents[1];
-
+//AKOLLIAS here
     status = hsa_amd_agent_iterate_memory_pools(agent2,
                             uct_rocm_hsa_pool_callback, (void*)&pool);
     if ((status != HSA_STATUS_SUCCESS) && (status != HSA_STATUS_INFO_BREAK)) {
