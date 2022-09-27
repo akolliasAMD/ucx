@@ -120,12 +120,6 @@ hsa_agent_t uct_rocm_base_get_dev_agent(int dev_num)
     return uct_rocm_base_agents.agents[dev_num];
 }
 
-hsa_agent_t uct_rocm_base_get_gpu_agent(int dev_num)
-{
-    ucs_assert(dev_num < uct_rocm_base_agents.num_gpu);
-    return uct_rocm_base_agents.gpu_agents[dev_num];
-}
-
 int uct_rocm_base_get_dev_num(hsa_agent_t agent)
 {
     int i;
@@ -257,6 +251,16 @@ static hsa_status_t uct_rocm_hsa_pool_callback(hsa_amd_memory_pool_t pool, void*
     }
     return HSA_STATUS_SUCCESS;
 }
+
+ucs_status_t uct_rocm_base_get_device_pool(int deviceId, hsa_amd_memory_pool_t *pool)
+ {
+    hsa_agent_t agent1;
+    ucs_assert(deviceId < uct_rocm_base_agents.num_gpu);
+    agent1 = uct_rocm_base_agents.gpu_agents[deviceId];
+    return hsa_amd_agent_iterate_memory_pools(agent1,
+                            uct_rocm_hsa_pool_callback, (void*)pool);
+ }
+
 
 ucs_status_t uct_rocm_base_get_link_type(hsa_amd_link_info_type_t *link_type)
 {

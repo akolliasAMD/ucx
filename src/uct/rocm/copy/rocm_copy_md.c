@@ -222,29 +222,6 @@ static void uct_rocm_copy_md_close(uct_md_h uct_md) {
     ucs_free(md);
 }
 
-static hsa_status_t uct_rocm_hsa_pool_callback(hsa_amd_memory_pool_t pool, void* data)
-{
-    int allowed;
-    uint32_t flags;
-    hsa_amd_segment_t segment;
-
-    hsa_amd_memory_pool_get_info(pool, HSA_AMD_MEMORY_POOL_INFO_RUNTIME_ALLOC_ALLOWED, &allowed);
-    if (allowed) {
-        hsa_amd_memory_pool_get_info(pool, HSA_AMD_MEMORY_POOL_INFO_SEGMENT, &segment);
-        if (HSA_AMD_SEGMENT_GLOBAL != segment) {
-            return HSA_STATUS_SUCCESS;
-        }
-
-        hsa_amd_memory_pool_get_info(pool, HSA_AMD_MEMORY_POOL_INFO_GLOBAL_FLAGS, &flags);
-        if (flags & HSA_AMD_MEMORY_POOL_GLOBAL_FLAG_COARSE_GRAINED) {
-            *((hsa_amd_memory_pool_t*)data) = pool;
-            return HSA_STATUS_INFO_BREAK;
-        }
-    }
-    return HSA_STATUS_SUCCESS;
-}
-
-
 static ucs_status_t uct_rocm_copy_mem_alloc(uct_md_h md, size_t *length_p,
                                             void **address_p,
                                             ucs_memory_type_t mem_type,
@@ -253,37 +230,23 @@ static ucs_status_t uct_rocm_copy_mem_alloc(uct_md_h md, size_t *length_p,
                                             uct_mem_h *memh_p)
 {
     ucs_status_t status;
-    // hsa_amd_memory_pool_t memory_pool; // INITIALIZE this
 
-    hsa_agent_t agent1;
     hsa_amd_memory_pool_t pool;
     uint32_t hsa_flags=0;
-
-    // f (uct_rocm_base_agents.num_gpu < 2) {
-    //     return UCS_OK;
-    // }
-    //agent akollias
-    agent1 = uct_rocm_base_get_gpu_agent(0);
-    status = hsa_amd_agent_iterate_memory_pools(agent1,
-                            uct_rocm_hsa_pool_callback, (void*)&pool);
-
-    printf("uct_rocm_copy_mem_alloc FUNCTION\n");
+    int deviceId;
+    // TODO: proper flags, Find which device, make function that gives back pool from device
+    hipGetDevice(&deviceId);
+    status = uct_rocm_base_get_device_pool(deviceId, &pool);
+    //use status
     if ((mem_type != UCS_MEMORY_TYPE_ROCM_MANAGED) &&
         (mem_type != UCS_MEMORY_TYPE_ROCM)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
-    // if (!uct_cuda_base_is_context_active()) {
-    //     ucs_error("attempt to allocate cuda memory without active context");
-    //     return UCS_ERR_NO_DEVICE;
-    // }
-
     if (mem_type == UCS_MEMORY_TYPE_ROCM) {
         status = hsa_amd_memory_pool_allocate(pool, *length_p, hsa_flags, address_p);
-        // status = ucm_orig_hsa_amd_memory_pool_allocate(memory_pool, *length_p, flags, address_p);
     } else {
         return UCS_ERR_UNSUPPORTED;
-            // UCT_CUDADRV_FUNC_LOG_ERR(cuMemAllocManaged((CUdeviceptr*)address_p, *length_p, CU_MEM_ATTACH_GLOBAL));
     }
 
     if (status != UCS_OK) {
@@ -296,9 +259,6 @@ static ucs_status_t uct_rocm_copy_mem_alloc(uct_md_h md, size_t *length_p,
 
 static ucs_status_t uct_rocm_copy_mem_free(uct_md_h md, uct_mem_h memh)
 {
-    // hsa_status_t ucm_hsa_amd_memory_pool_free((void*) memh)
-    // return UCT_CUDADRV_FUNC_LOG_ERR(cuMemFree((CUdeviceptr)memh));
-    // return ucm_hsa_amd_memory_pool_free((void*)memh);
     return hsa_amd_memory_pool_free((void*)memh);
 }
 
@@ -325,8 +285,6 @@ static ucs_status_t uct_rocm_copy_mem_free(uct_md_h md, uct_mem_h memh)
 static uct_md_ops_t md_ops = {
     .close                  = uct_rocm_copy_md_close,
     .query                  = uct_rocm_copy_md_query,
-    .mem_alloc              = uct_rocm_copy_mem_alloc,
-    .mem_free               = uct_rocm_copy_mem_free,
     .mkey_pack              = uct_rocm_copy_mkey_pack,
     .mem_reg                = uct_rocm_copy_mem_reg,
     .mem_dereg              = uct_rocm_copy_mem_dereg,
@@ -379,6 +337,8 @@ uct_rocm_copy_mem_rcache_dereg(uct_md_h uct_md,
 static uct_md_ops_t md_rcache_ops = {
     .close                  = uct_rocm_copy_md_close,
     .query                  = uct_rocm_copy_md_query,
+    .mem_alloc              = uct_rocm_copy_mem_alloc,
+    .mem_free               = uct_rocm_copy_mem_free,
     .mkey_pack              = uct_rocm_copy_mkey_pack,
     .mem_reg                = uct_rocm_copy_mem_rcache_reg,
     .mem_dereg              = uct_rocm_copy_mem_rcache_dereg,
